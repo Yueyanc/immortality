@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsup ./index.ts --watch  --onSuccess \"node ./dist/index.js\" "
+    "dev": "tsup ./index.ts --watch  --onSuccess \"node ./dist/index.js\" ",
+    "dev:ui":"pnpm run --filter rimworld-mod-editer dev "
   },
   "keywords": [],
   "author": "AdienChen",
