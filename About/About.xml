@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ModMetaData>
+<name>Immortality</name> <!-- This is the name of the mod -->
+    <author>Yueyanc</author> 
+    <packageId>Yueyanc.Immortality</packageId> <!-- It is best to use this format-->
+    <description>This mod will make your life on the Rim more enjoyable.</description> <!-- Be creative, the description is what people will see when they look at your mod and don't leave space between description tags -->
+    <supportedVersions>
+     <li>1.4</li>
+    </supportedVersions> <!-- This is the version of RimWorld that the mod is compatible with -->
+</ModMetaData> <!-- be sure to close all tags you open -->
