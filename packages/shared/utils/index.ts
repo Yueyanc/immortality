@@ -49,7 +49,6 @@ export async function parseXMLFile(fileHandle: FileSystemFileHandle) {
     file = await fileHandle.getFile();
   }
   const text = await file.text();
-  console.log(text);
 
   return parseXML(text);
 }
@@ -61,8 +60,9 @@ export interface TagTree {
   $tagName?: string;
   $tagType: TagType;
   key: string | number;
-  value?: string;
+  $label?: string;
   $childrens?: TagTree[];
+  $value?: string;
   $?: any;
 }
 export enum TagType {
@@ -71,6 +71,22 @@ export enum TagType {
   Attr = "Attr",
 }
 
+function assembleNode(value: any, key: string) {
+  const childs = transformXMLObjectToTree(value);
+  const node: TagTree = {
+    $tagType: key === "$" ? TagType.Attr : TagType.Node,
+    $tagName: key,
+    $: value.$,
+    key: _.uniqueId(),
+    $childrens: childs,
+  };
+  const label = childs.find((item) => item.$tagName === "label")?.$value;
+  const $value = childs.find((item) => item.$tagType === TagType.Text)?.$value;
+  if (label) node.$label = label;
+  if ($value) node.$value = $value;
+
+  return node;
+}
 export function transformXMLObjectToTree(value: any): TagTree[] {
   if (_.isPlainObject(value)) {
     const arr: TagTree[] = [];
@@ -78,31 +94,22 @@ export function transformXMLObjectToTree(value: any): TagTree[] {
       if (_.isArray(val)) {
         arr.push(
           ...val.map((item) => {
-            const childs = transformXMLObjectToTree(item);
-            return {
-              $tagType: key === "$" ? TagType.Attr : TagType.Node,
-              $tagName: key,
-              $: item.$ ? item.$ : null,
-              key: _.uniqueId(),
-              $childrens: childs,
-            };
+            return assembleNode(item, key);
           })
         );
       } else {
-        const childs = transformXMLObjectToTree(val);
-        arr.push({
-          $tagType: key === "$" ? TagType.Attr : TagType.Node,
-          $tagName: key,
-          $: val.$ ? val.$ : null,
-          key: _.uniqueId(),
-          $childrens: childs,
-        });
+        arr.push(assembleNode(val, key));
       }
     });
     return arr;
   } else if (_.isString(value)) {
     return [
-      { $tagType: TagType.Text, $tagName: value, key: _.uniqueId(), value },
+      {
+        $tagType: TagType.Text,
+        $tagName: value,
+        key: _.uniqueId(),
+        $value: value,
+      },
     ];
   }
   return [];

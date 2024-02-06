@@ -1,4 +1,4 @@
-import xml2js from "xml2js";
+import xml2js, { ParserOptions } from "xml2js";
 import path from "path";
 import fs from "fs";
 import {
@@ -9,19 +9,25 @@ import {
 } from "./packages/shared/utils/index";
 import _ from "lodash";
 const root = process.cwd();
-const valueMap = {};
-const parser = new xml2js.Parser({
-  valueProcessors: [
-    (value, name) => {
-      console.log("value", value, name);
-      if (value) return value;
-    },
-  ],
-});
-async function parseXmlByPath(filePath: string) {
+const valueMap: Record<string, any> = {};
+
+// 收集可能的value值
+function collectValue(value: string, name: string, filePath: string) {
+  const arr = valueMap[name];
+  if (arr) {
+    arr.push({ value, path: path.relative(root, filePath) });
+  } else {
+    valueMap[name] = [{ value, path: path.relative(root, filePath) }];
+  }
+}
+// 解析path的xml文件为obj
+async function parseXmlByPath(filePath: string, options?: ParserOptions) {
   const content = fs.readFileSync(filePath);
+  const parser = new xml2js.Parser(options);
   return await parser.parseStringPromise(content);
 }
+
+// 查找所有xml文件
 function findXmlFiles(folderPath: string) {
   const files = fs.readdirSync(folderPath);
   let xmlFilesPatch: string[] = [];
@@ -40,66 +46,27 @@ function findXmlFiles(folderPath: string) {
   });
   return xmlFilesPatch;
 }
-async function main() {
-  const pathList = findXmlFiles(path.join(root, "./packages/Core"));
-  for (const filePath of pathList) {
-    const obj = await parseXmlByPath(pathList[6]);
-    // console.dir(obj, { depth: null });
 
-    const defs = collectDefs(obj.Defs);
-    defs.forEach((def) => {
-      def.path = filePath;
+async function main() {
+  const pathList = findXmlFiles(path.join(root, "./packages/Core/Defs"));
+  const parsed = [];
+  for (const filePath of pathList) {
+    const obj = await parseXmlByPath(filePath, {
+      valueProcessors: [
+        (value, name) => {
+          collectValue(value, name, filePath);
+        },
+      ],
     });
+    parsed.push({ parseResult: obj, filePath });
   }
-  // console.dir(collectDefs(obj.Defs), { depth: null });
-}
-function collectDefs(defs: Record<string, any>) {
-  const arr: any[] = [];
-  Object.keys(defs).map((key) => {
-    const value = defs[key];
-    arr.push(
-      ...value.map((item: any) => ({
-        defName: item.defName,
-        key,
-        abstract: value?.$?.abstract === "true",
-      }))
-    );
+  _.each(valueMap, (value, key) => {
+    valueMap[key] = _.unionBy(value, "value");
   });
-  return arr;
+  fs.writeFileSync(
+    path.join(root, "./valueMap.js"),
+    `export default \n${JSON.stringify(valueMap)}\n`
+  );
+  // console.dir(valueMap, { depth: null });
 }
 main();
-
-// async function main() {
-//   const nodeValueMap: Record<string, any[]> = {};
-//   const pathList = findXmlFiles(path.join(root, "./packages/Core"));
-//   const allScanNode = [];
-//   for (const xmlPath of pathList) {
-//     const obj = await parseXmlByPath(xmlPath);
-//     const tree = transformXMLObjectToTree(obj);
-//     const list = treeToList(tree).filter(
-//       (item) =>
-//         item.$tagType === TagType.Node &&
-//         item.$childrens?.find((child) => child.$tagType === TagType.Text)
-//     );
-//     allScanNode.push(...list);
-//   }
-//   allScanNode.forEach((item) => {
-//     const nodeValue = nodeValueMap[item.$tagName as string];
-//     if (nodeValue) {
-//       Array.isArray(item.$childrens) && nodeValue.push(...item.$childrens);
-//     } else {
-//       nodeValueMap[item.$tagName as string] = item.$childrens as TagTree[];
-//     }
-//   });
-//   Object.keys(nodeValueMap).forEach((key) => {
-//     nodeValueMap[key] = _.unionBy(nodeValueMap[key], (item) => item.value).map(
-//       (item) => item.value
-//     );
-//   });
-//   console.dir(nodeValueMap);
-//   fs.writeFileSync(
-//     path.join(root, "./valueMap.js"),
-//     `export default \n${JSON.stringify(nodeValueMap)}\n`
-//   );
-// }
-// main();
