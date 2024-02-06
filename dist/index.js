@@ -1,46 +1,85 @@
-"use strict";
-var __create = Object.create;
-var __defProp = Object.defineProperty;
-var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
-var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __copyProps = (to, from, except, desc) => {
-  if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-  }
-  return to;
+var __async = (__this, __arguments, generator) => {
+  return new Promise((resolve, reject) => {
+    var fulfilled = (value) => {
+      try {
+        step(generator.next(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var rejected = (value) => {
+      try {
+        step(generator.throw(value));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
+    step((generator = generator.apply(__this, __arguments)).next());
+  });
 };
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
 
 // index.ts
-var import_xml2js = require("xml2js");
-var import_path = __toESM(require("path"));
-var import_fs = __toESM(require("fs"));
+import xml2js from "xml2js";
+import path from "path";
+import fs from "fs";
 var root = process.cwd();
-function parseXml(filePath) {
-  const content = import_fs.default.readFileSync(filePath);
-  (0, import_xml2js.parseString)(content, (err, result) => {
-    result.Defs.ThingDef.forEach((item) => item.description = []);
-    import_fs.default.writeFileSync(
-      import_path.default.join(
-        filePath,
-        `../${import_path.default.basename(filePath).replace("xml", "")}.js`
-      ),
-      `export default 
-${JSON.stringify(result)}
-`
+var parser = new xml2js.Parser({
+  valueProcessors: [
+    (value, name) => {
+      console.log("value", value, name);
+      return value;
+    }
+  ]
+});
+function parseXmlByPath(filePath) {
+  return __async(this, null, function* () {
+    const content = fs.readFileSync(filePath);
+    return yield parser.parseStringPromise(content);
+  });
+}
+function findXmlFiles(folderPath) {
+  const files = fs.readdirSync(folderPath);
+  let xmlFilesPatch = [];
+  files.forEach((file) => {
+    const filePath = path.join(folderPath, file);
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      xmlFilesPatch = xmlFilesPatch.concat(findXmlFiles(filePath));
+    } else if (path.extname(file) === ".xml") {
+      xmlFilesPatch.push(filePath);
+    }
+  });
+  return xmlFilesPatch;
+}
+function main() {
+  return __async(this, null, function* () {
+    const pathList = findXmlFiles(path.join(root, "./packages/Core"));
+    for (const filePath of pathList) {
+      const obj = yield parseXmlByPath(pathList[6]);
+      const defs = collectDefs(obj.Defs);
+      defs.forEach((def) => {
+        def.path = filePath;
+      });
+    }
+  });
+}
+function collectDefs(defs) {
+  const arr = [];
+  Object.keys(defs).map((key) => {
+    const value = defs[key];
+    arr.push(
+      ...value.map((item) => {
+        var _a;
+        return {
+          defName: item.defName,
+          key,
+          abstract: ((_a = value == null ? void 0 : value.$) == null ? void 0 : _a.abstract) === "true"
+        };
+      })
     );
   });
-  return;
+  return arr;
 }
-parseXml(import_path.default.join(root, "./Defs/Items_Food.xml"));
+main();
+//# sourceMappingURL=index.js.map

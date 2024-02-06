@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
   FloderTree,
   TagTree,
+  TagType,
   flattenTree,
   getFolderTree,
   parseXMLFile,
-  transformXMLObjectToTree
-} from "@/utils"
+  transformXMLObjectToTree,
+  treeToList
+} from "shared/utils"
 import { DownOutlined } from "@ant-design/icons"
 import ThingNode from "@/components/Nodes/ThingNode"
 import NormalNode from "@/components/Nodes/NormalNode"
@@ -21,7 +23,15 @@ function App() {
   useEffect(() => {
     if (currentFile) {
       parseXMLFile(currentFile).then((res) => {
-        setCurrentFileXMLTree(transformXMLObjectToTree(res))
+        const tree = transformXMLObjectToTree(res)
+        setCurrentFileXMLTree(tree)
+        console.log(
+          treeToList(tree).filter(
+            (item) =>
+              item.$tagType === TagType.Node &&
+              item.$childrens?.find((child) => child.$tagType === TagType.Text)
+          )
+        )
       })
     }
   }, [currentFile])

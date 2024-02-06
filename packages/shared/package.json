@@ -1,12 +1,13 @@
 {
-  "name": "immortality",
+  "name": "shared",
   "version": "1.0.0",
-  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsup --watch  --onSuccess \"node ./dist/index.js\" ",
-    "dev:ui": "pnpm run --filter rimworld-mod-editer dev "
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "export": {
+    "./utils": "./utils/index.ts"
   },
   "keywords": [],
   "author": "AdienChen",
@@ -14,12 +15,9 @@
   "dependencies": {
     "@types/lodash": "^4.14.202",
     "lodash": "^4.17.21",
-    "shared": "workspace:*",
-    "tsup": "^8.0.1",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
-    "@types/xml2js": "^0.4.14",
-    "typescript": "^5.3.3"
+    "@types/wicg-file-system-access": "^2023.10.4"
   }
 }
