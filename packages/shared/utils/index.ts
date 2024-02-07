@@ -3,19 +3,22 @@ import _ from "lodash";
 export function classNames(...classes: unknown[]): string {
   return classes.filter(Boolean).join(" ");
 }
-export interface FloderTree {
+export interface FolderTreeNode {
   fileName: string;
   handle: FileSystemDirectoryHandle | FileSystemFileHandle;
-  parent?: FloderTree;
   isDir: boolean;
   key: string | number;
-  children?: FloderTree[];
+  parent?: FolderTreeNode;
+  children?: FolderTreeNode[];
 }
 export function traverseTree(
-  tree: FloderTree[],
-  callback: (node: FloderTree) => any
+  tree: FolderTreeNode[],
+  callback: (node: FolderTreeNode) => any
 ) {
-  function traverse(node: FloderTree, callback: (node: FloderTree) => any) {
+  function traverse(
+    node: FolderTreeNode,
+    callback: (node: FolderTreeNode) => any
+  ) {
     if (!node) return;
     callback(node);
     if (node.children)
@@ -24,8 +27,8 @@ export function traverseTree(
   tree.forEach((item) => traverse(item, callback));
 }
 export function findTreeNode(
-  tree: FloderTree[],
-  condition: (node: FloderTree) => any
+  tree: FolderTreeNode[],
+  condition: (node: FolderTreeNode) => any
 ) {
   for (const value of tree) {
     console.log(value);
@@ -36,29 +39,59 @@ export function findTreeNode(
     if (value.children) return findTreeNode(value.children, condition);
   }
 }
+export const findNodesInTree = <T extends Record<string, any>>(
+  tree: T[],
+  predicate: (node: T) => any,
+  prop = { children: "children" }
+): T[] => {
+  return _.flatMapDeep(tree, (node) => {
+    if (predicate(node)) {
+      return [node];
+    }
+    if (node[prop.children]) {
+      return findNodesInTree(node[prop.children], predicate);
+    }
+    return [];
+  });
+};
 
+// 获取文件树
 export async function getFolderTree(
-  directoryHandle: FileSystemDirectoryHandle,
-  parent?: FloderTree
-): Promise<FloderTree[]> {
-  const entries = directoryHandle.entries();
-  const tree: FloderTree[] = [];
+  directoryHandle: FileSystemDirectoryHandle
+): Promise<FolderTreeNode[]> {
+  // 处理每个文件/文件夹
+  const processEntry = async (
+    entry: FileSystemHandle
+  ): Promise<FolderTreeNode> => {
+    const isDir = entry.kind === "directory";
+    const handle = isDir
+      ? (entry as FileSystemDirectoryHandle)
+      : (entry as FileSystemFileHandle);
 
-  for await (const entry of entries) {
-    const isDir = entry[1] instanceof FileSystemDirectoryHandle;
-    const node: FloderTree = {
-      parent,
-      fileName: entry[0],
-      key: _.uniqueId(),
-      handle: entry[1],
+    // 创建节点对象
+    const node: FolderTreeNode = {
+      fileName: entry.name,
+      handle,
       isDir,
+      key: _.uniqueId(),
     };
-    node.children = isDir
-      ? await getFolderTree(entry[1] as FileSystemDirectoryHandle, node)
-      : undefined;
-    tree.push(node);
+
+    // 如果是文件夹，递归获取子节点
+    if (isDir) {
+      const children = await getFolderTree(handle as FileSystemDirectoryHandle);
+      node.children = children;
+      children.forEach((child) => {
+        child.parent = node;
+      });
+    }
+    return node;
+  };
+  const asyncEntries = directoryHandle.entries();
+  const entries: FolderTreeNode[] = [];
+  for await (const [, entry] of asyncEntries) {
+    entries.push(await processEntry(entry));
   }
-  return tree;
+  return entries;
 }
 
 const XMLObjectMap: Map<FileSystemFileHandle, Record<string, any>> = new Map();

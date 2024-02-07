@@ -4,7 +4,7 @@ import { ProTable, ProTableProps } from "@ant-design/pro-components"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { StyleProvider } from "@ant-design/cssinjs"
 import {
-  FloderTree,
+  FolderTreeNode,
   TagTree,
   TagType,
   findTreeNode,
@@ -12,7 +12,8 @@ import {
   getFolderTree,
   parseXMLFile,
   transformXMLObjectToTree,
-  traverseTree
+  traverseTree,
+  findNodesInTree
 } from "shared/utils"
 import { DownOutlined } from "@ant-design/icons"
 import ThingNode from "@/components/Nodes/ThingNode"
@@ -21,21 +22,22 @@ import NormalNode from "@/components/Nodes/NormalNode"
 import valueMap from "@/assets/valueMap"
 import _ from "lodash"
 import useTranslate from "@/hooks/useTranslate"
+import { BasicDataNode } from "antd/es/tree"
+import useMods from "@/hooks/useMods"
+import { DirNode, FileNode } from "../../../shared/utils/file"
 
-type modNode = FloderTree & { modMetaData: any }
 function App() {
   const directoryHandle = useRef<FileSystemDirectoryHandle>()
   const [isPengding, setTransition] = useTransition()
-  const [workspaceTree, setWorkspaceTree] = useState<FloderTree[]>([])
-  const [currentFloderTree, setCurrentFloderTree] = useState<FloderTree[]>([])
-  const [floderList, setFloderList] = useState<FloderTree[]>([])
+  const [workspaceTree, setWorkspaceTree] = useState<FolderTreeNode[]>([])
+  const [currentFloderTree, setCurrentFloderTree] = useState<DirNode[]>([])
   const [currentFile, setCurrentFile] = useState<FileSystemFileHandle>()
   const [currentFileXMLTree, setCurrentFileXMLTree] = useState<TagTree[]>([])
   const [currentSelectNode, setCurrentSelectNode] = useState<TagTree>()
-  const [modeList, setModList] = useState<modNode[]>([])
+
   const [expandKeys, setExpandKeys] = useState<any[]>([])
   const { startTranslate } = useTranslate()
-
+  const { modList } = useMods(workspaceTree)
   const valueSource = useMemo(() => {
     const tagName = currentSelectNode?.$tagName
     if (tagName && _.isArray(valueMap[tagName])) {
@@ -52,41 +54,25 @@ function App() {
     { title: "可能的值", dataIndex: "value" },
     { title: "路径", dataIndex: "path", ellipsis: true }
   ]
-  useEffect(() => {
-    const list: modNode[] = []
-    traverseTree(workspaceTree, async (node) => {
-      const aboutXML = node?.children?.find(
-        (item) => item.fileName === "About.xml"
-      )
-      if (node.fileName === "About" && aboutXML) {
-        const aboutObj = await parseXMLFile(
-          aboutXML.handle as FileSystemFileHandle
-        )
-        const modMetaData = _.get(aboutObj, ["ModMetaData"])
-        list.push({ ...node, modMetaData })
-        setModList(list)
-      }
-    })
-  }, [workspaceTree])
+
   useEffect(() => {
     if (currentFile) {
       parseXMLFile(currentFile).then((res) => {
         const tree = transformXMLObjectToTree(res)
         setCurrentFileXMLTree(tree)
         setExpandKeys(tree.map((item) => item.key))
-        console.log(
-          tree.map((item) => item.key),
-          tree
-        )
       })
     }
   }, [currentFile])
-  const floderTreeSelect: TreeProps["onSelect"] = (value) => {
-    const floder = floderList.find((item) => item.key === value[0])
-    if (!floder?.isDir) {
-      setCurrentFile(floder?.handle as FileSystemFileHandle)
+
+  const dirTreeSelect: TreeProps<
+    (DirNode | FileNode) & BasicDataNode
+  >["onSelect"] = (value, { selected, node }) => {
+    if (selected && !node.isDir()) {
+      setCurrentFile(node.handle)
     }
   }
+
   return (
     <StyleProvider hashPriority="high">
       <div className="relative flex bg-white">
@@ -99,23 +85,25 @@ function App() {
                     mode: "readwrite"
                   })
                 directoryHandle.current = fileSystemDirectoryHandle
-                const tree = await getFolderTree(fileSystemDirectoryHandle)
-                setWorkspaceTree(tree)
-                setCurrentFloderTree(tree)
-                setFloderList(treeToList(tree))
+                const tree = new DirNode({
+                  handle: fileSystemDirectoryHandle
+                })
+                await tree.getEntries()
+                tree.setRoot(tree)
+                setCurrentFloderTree([tree])
               }}
             >
               选取mod文件夹
             </Button>
             <Select
               className="w-[200px]"
-              options={modeList.map((item) => ({
-                label: item.modMetaData.name,
+              options={modList.map((item) => ({
+                label: item.info.name,
                 value: item.key
               }))}
               onSelect={(value) => {
-                const mode = modeList.find((item) => item.key === value)
-                mode?.parent && setCurrentFloderTree([mode.parent])
+                const mod = modList.find((item) => item.key === value)
+                mod?.parent && setCurrentFloderTree([mod])
               }}
             />
             <Button
@@ -130,12 +118,12 @@ function App() {
               汉化当前mod
             </Button>
           </Space>
-          <Tree
+          <Tree<DirNode>
             showLine
-            fieldNames={{ title: "fileName", key: "key" }}
+            fieldNames={{ title: "name", key: "key" }}
             switcherIcon={<DownOutlined />}
             treeData={currentFloderTree}
-            onSelect={floderTreeSelect}
+            onSelect={dirTreeSelect}
           />
         </div>
         <div className="flex h-screen flex-1 flex-col ">
