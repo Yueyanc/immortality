@@ -63,8 +63,8 @@ function App() {
     }
   }
   return (
-    <div className="relative flex overflow-hidden bg-white">
-      <div className="h-screen overflow-y-auto border-r-2 p-5">
+    <div className="relative flex bg-white">
+      <div className="h-screen shrink-0 overflow-y-auto border-r-2 p-5">
         <Space>
           <Button
             onClick={async () => {
@@ -128,7 +128,7 @@ function App() {
             treeData={currentFileXMLTree}
           />
         </div>
-        <div className="border-gray h-[500px] border-t-2">
+        <div className="border-gray border-t-2">
           <ProTable
             title={() =>
               currentSelectNode?.$tagName && (
