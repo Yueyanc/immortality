@@ -6,40 +6,59 @@ export function classNames(...classes: unknown[]): string {
 export interface FloderTree {
   fileName: string;
   handle: FileSystemDirectoryHandle | FileSystemFileHandle;
+  parent?: FloderTree;
   isDir: boolean;
   key: string | number;
   children?: FloderTree[];
 }
+export function traverseTree(
+  tree: FloderTree[],
+  callback: (node: FloderTree) => any
+) {
+  function traverse(node: FloderTree, callback: (node: FloderTree) => any) {
+    if (!node) return;
+    callback(node);
+    if (node.children)
+      node.children.forEach((item) => traverse(item, callback));
+  }
+  tree.forEach((item) => traverse(item, callback));
+}
+export function findTreeNode(
+  tree: FloderTree[],
+  condition: (node: FloderTree) => any
+) {
+  for (const value of tree) {
+    console.log(value);
+
+    if (condition(value)) {
+      return value;
+    }
+    if (value.children) return findTreeNode(value.children, condition);
+  }
+}
+
 export async function getFolderTree(
-  directoryHandle: FileSystemDirectoryHandle
+  directoryHandle: FileSystemDirectoryHandle,
+  parent?: FloderTree
 ): Promise<FloderTree[]> {
   const entries = directoryHandle.entries();
   const tree: FloderTree[] = [];
 
   for await (const entry of entries) {
     const isDir = entry[1] instanceof FileSystemDirectoryHandle;
-    tree.push({
+    const node: FloderTree = {
+      parent,
       fileName: entry[0],
       key: _.uniqueId(),
       handle: entry[1],
       isDir,
-      children: isDir
-        ? await getFolderTree(entry[1] as FileSystemDirectoryHandle)
-        : undefined,
-    });
+    };
+    node.children = isDir
+      ? await getFolderTree(entry[1] as FileSystemDirectoryHandle, node)
+      : undefined;
+    tree.push(node);
   }
   return tree;
-}
-export function flattenTree(tree: FloderTree[]): FloderTree[] {
-  const flattenedTree: FloderTree[] = [];
-  for (const node of tree) {
-    flattenedTree.push(node);
-    if (node.isDir && node.children) {
-      const flattenedChildren = flattenTree(node.children);
-      flattenedTree.push(...flattenedChildren);
-    }
-  }
-  return flattenedTree;
 }
 
 const XMLObjectMap: Map<FileSystemFileHandle, Record<string, any>> = new Map();
@@ -57,12 +76,14 @@ export function parseXML(content: string) {
   return parser.parseStringPromise(content);
 }
 export interface TagTree {
-  $tagName?: string;
+  $tagName: string;
   $tagType: TagType;
+  $parent?: TagTree;
   key: string | number;
   $label?: string;
   $childrens?: TagTree[];
   $value?: string;
+  $pathSymbol?: string;
   $?: any;
 }
 export enum TagType {
@@ -72,14 +93,14 @@ export enum TagType {
 }
 
 function assembleNode(value: any, key: string) {
-  const childs = transformXMLObjectToTree(value);
   const node: TagTree = {
     $tagType: key === "$" ? TagType.Attr : TagType.Node,
     $tagName: key,
     $: value.$,
     key: _.uniqueId(),
-    $childrens: childs,
   };
+  const childs = transformXMLObjectToTree(value, node);
+  node.$childrens = childs;
   const label = childs.find((item) => item.$tagName === "label")?.$value;
   const $value = childs.find((item) => item.$tagType === TagType.Text)?.$value;
   if (label) node.$label = label;
@@ -87,18 +108,26 @@ function assembleNode(value: any, key: string) {
 
   return node;
 }
-export function transformXMLObjectToTree(value: any): TagTree[] {
+export function transformXMLObjectToTree(
+  value: any,
+  parent?: TagTree
+): TagTree[] {
   if (_.isPlainObject(value)) {
     const arr: TagTree[] = [];
     _.map(value, (val, key) => {
       if (_.isArray(val)) {
         arr.push(
-          ...val.map((item) => {
-            return assembleNode(item, key);
+          ...val.map((item, index) => {
+            const node = assembleNode(item, key);
+            node.$pathSymbol = (parent?.$pathSymbol || ``) + `${index}.key`;
+            node.$parent = parent;
+            return node;
           })
         );
       } else {
-        arr.push(assembleNode(val, key));
+        const node = assembleNode(val, key);
+        node.$parent = parent;
+        arr.push(node);
       }
     });
     return arr;
@@ -114,12 +143,12 @@ export function transformXMLObjectToTree(value: any): TagTree[] {
   }
   return [];
 }
-export function treeToList(tree: TagTree[]) {
-  const arr: TagTree[] = [];
+export function treeToList(tree: any[], childrenProp = "childrens") {
+  const arr: any[] = [];
   tree.forEach((item) => {
     arr.push(item);
-    if (_.isArray(item.$childrens)) {
-      arr.push(...treeToList(item.$childrens));
+    if (_.isArray(item[childrenProp])) {
+      arr.push(...treeToList(item[childrenProp], childrenProp));
     }
   });
   return arr;

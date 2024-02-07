@@ -1,12 +1,6 @@
 import xml2js, { ParserOptions } from "xml2js";
 import path from "path";
 import fs from "fs";
-import {
-  TagTree,
-  TagType,
-  transformXMLObjectToTree,
-  treeToList,
-} from "./packages/shared/utils/index";
 import _ from "lodash";
 const root = process.cwd();
 const valueMap: Record<string, any> = {};
