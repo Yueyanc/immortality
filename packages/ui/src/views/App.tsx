@@ -1,6 +1,22 @@
 import xml2js from "xml2js"
-import { Button, Select, Space, Table, TableProps, Tree, TreeProps } from "antd"
-import { ProTable, ProTableProps } from "@ant-design/pro-components"
+import {
+  Badge,
+  Button,
+  Image,
+  Select,
+  Space,
+  Table,
+  TableProps,
+  Tree,
+  TreeProps
+} from "antd"
+import {
+  ProCard,
+  ProDescriptions,
+  ProDescriptionsItemProps,
+  ProTable,
+  ProTableProps
+} from "@ant-design/pro-components"
 import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { StyleProvider } from "@ant-design/cssinjs"
 import {
@@ -15,6 +31,7 @@ import {
   traverseTree,
   findNodesInTree
 } from "shared/utils"
+import { Def, XML } from "shared/utils/file"
 import { DownOutlined } from "@ant-design/icons"
 import ThingNode from "@/components/Nodes/ThingNode"
 import NormalNode from "@/components/Nodes/NormalNode"
@@ -25,54 +42,172 @@ import useTranslate from "@/hooks/useTranslate"
 import { BasicDataNode } from "antd/es/tree"
 import useMods from "@/hooks/useMods"
 import { DirNode, FileNode } from "../../../shared/utils/file"
+import { ExpandableConfig } from "antd/es/table/interface"
+
+const Descriptions: React.FC<{ record: Def }> = ({ record }) => {
+  // TODO: 多视角图片支持
+  const [textureUrl, setTextureUrl] = useState("")
+  useEffect(() => {
+    async function getPng() {
+      const texturePaths =
+        record.parsed?.graphicData?.[0]?.texPath?.[0]?.split("/")
+      let target: any
+      if (texturePaths) {
+        target = record.getMod()?.textureDir?.handle
+        for (let index = 0; index < texturePaths.length; index++) {
+          const name = texturePaths[index]
+          if (index !== texturePaths.length - 1) {
+            target = await target?.getDirectoryHandle(name)
+          } else {
+            target = await target?.getFileHandle(name + ".png")
+          }
+        }
+      }
+      return target
+    }
+    getPng().then(async (res: FileSystemFileHandle) => {
+      const imageUrl = URL.createObjectURL(await res.getFile())
+      setTextureUrl(imageUrl)
+    })
+  }, [])
+  return (
+    <ProDescriptions editable={{}} dataSource={record}>
+      {textureUrl && (
+        <ProDescriptions.Item
+          editable={false}
+          span={3}
+          contentStyle={{
+            maxWidth: "100%"
+          }}
+          label="贴图"
+        >
+          <Image src={textureUrl} height={200} />
+        </ProDescriptions.Item>
+      )}
+
+      <ProDescriptions.Item
+        editable={false}
+        span={2}
+        contentStyle={{
+          maxWidth: "100%"
+        }}
+        valueType="text"
+        label="描述"
+      >
+        {record.description}
+      </ProDescriptions.Item>
+      <br />
+      <ProDescriptions.Item
+        editable={false}
+        valueType="text"
+        label="游戏内名称"
+        span={3}
+        ellipsis
+      >
+        {record.label}
+      </ProDescriptions.Item>
+      <ProDescriptions.Item label="定义代码" valueType="jsonCode">
+        {JSON.stringify(record.parsed)}
+      </ProDescriptions.Item>
+    </ProDescriptions>
+  )
+}
 
 function App() {
   const directoryHandle = useRef<FileSystemDirectoryHandle>()
   const [isPengding, setTransition] = useTransition()
   const [workspaceTree, setWorkspaceTree] = useState<FolderTreeNode[]>([])
   const [currentFloderTree, setCurrentFloderTree] = useState<DirNode[]>([])
-  const [currentFile, setCurrentFile] = useState<FileSystemFileHandle>()
-  const [currentFileXMLTree, setCurrentFileXMLTree] = useState<TagTree[]>([])
-  const [currentSelectNode, setCurrentSelectNode] = useState<TagTree>()
-
-  const [expandKeys, setExpandKeys] = useState<any[]>([])
-  const { startTranslate } = useTranslate()
+  const [currentFiles, setCurrentFiles] = useState<XML[]>()
+  const [defTypeEnum, setDefTypeEnum] = useState(new Map())
   const { modList } = useMods(workspaceTree)
-  const valueSource = useMemo(() => {
-    const tagName = currentSelectNode?.$tagName
-    if (tagName && _.isArray(valueMap[tagName])) {
-      return valueMap[tagName].map((item: any) => ({
-        key: _.uniqueId(),
-        value: item.value,
-        path: item.path
-      }))
-    }
-    return []
-  }, [currentSelectNode])
-
-  const valueTableColumns: ProTableProps<any, any>["columns"] = [
-    { title: "可能的值", dataIndex: "value" },
-    { title: "路径", dataIndex: "path", ellipsis: true }
-  ]
-
-  useEffect(() => {
-    if (currentFile) {
-      parseXMLFile(currentFile).then((res) => {
-        const tree = transformXMLObjectToTree(res)
-        setCurrentFileXMLTree(tree)
-        setExpandKeys(tree.map((item) => item.key))
-      })
-    }
-  }, [currentFile])
 
   const dirTreeSelect: TreeProps<
     (DirNode | FileNode) & BasicDataNode
-  >["onSelect"] = (value, { selected, node }) => {
-    if (selected && !node.isDir()) {
-      setCurrentFile(node.handle)
-    }
-  }
+  >["onSelect"] = (value, { selected, node }) => {}
 
+  const colums: ProTableProps<Def, any>["columns"] = useMemo(() => {
+    return [
+      {
+        title: "类型",
+        dataIndex: "isAbstract",
+        render: (text, record) => {
+          if (record.isAbstract) {
+            return <Badge status="processing" text="抽象类" />
+          } else {
+            return <Badge status="success" text="具体定义" />
+          }
+        },
+        width: 100,
+        filters: true,
+        onFilter: true,
+        valueType: "select",
+        valueEnum: {
+          true: { text: "抽象类" },
+          false: {
+            text: "具体定义"
+          }
+        },
+        hideInSearch: true
+      },
+      {
+        title: "标题",
+        dataIndex: "title",
+        renderText: (text, record) => {
+          return record.defName || record.className
+        },
+        copyable: true,
+        ellipsis: true,
+        width: 180
+      },
+      {
+        title: "定义类型",
+        dataIndex: "defType",
+        renderText: (text, record) => {
+          return record.defType
+        },
+        copyable: true,
+        ellipsis: true,
+
+        width: 150,
+        valueEnum: defTypeEnum
+      },
+      {
+        title: "文件路径",
+        dataIndex: "key",
+        hideInSearch: true,
+        renderText: (text, record) => {
+          return record?.filePaths?.join("/")
+        },
+        copyable: true,
+        ellipsis: true
+      },
+      {
+        title: "全文搜索",
+        dataIndex: "key",
+        formItemProps: {
+          name: "contextSearch"
+        },
+        hideInTable: true
+      }
+    ]
+  }, [defTypeEnum])
+
+  const allDefs = useMemo(() => {
+    const defs = currentFiles?.map((item) => item.defs)?.flat()
+    const defTypeEnum = new Map()
+    defs?.forEach((value) => {
+      const defType = value.defType
+      if (!defTypeEnum.has(defType)) defTypeEnum.set(defType, { text: defType })
+    })
+    setDefTypeEnum(defTypeEnum)
+    return defs
+  }, [currentFiles])
+  const expandedRowRender: ExpandableConfig<Def>["expandedRowRender"] = (
+    record
+  ) => {
+    return <Descriptions record={record} />
+  }
   return (
     <StyleProvider hashPriority="high">
       <div className="relative flex bg-white">
@@ -88,9 +223,20 @@ function App() {
                 const tree = new DirNode({
                   handle: fileSystemDirectoryHandle
                 })
-                await tree.getEntries()
+                await tree.initDir()
                 tree.setRoot(tree)
                 setCurrentFloderTree([tree])
+                const files: XML[] = []
+                tree.traverse((node) => {
+                  if (!node.isDir() && node.isXML()) {
+                    files.push(node.xml)
+                  }
+                })
+                console.log(tree)
+
+                setTransition(() => {
+                  setCurrentFiles(files)
+                })
               }}
             >
               选取mod文件夹
@@ -101,22 +247,7 @@ function App() {
                 label: item.info.name,
                 value: item.key
               }))}
-              onSelect={(value) => {
-                const mod = modList.find((item) => item.key === value)
-                mod?.parent && setCurrentFloderTree([mod])
-              }}
             />
-            <Button
-              type="primary"
-              onClick={() => {
-                currentFloderTree?.[0]?.handle && currentFloderTree?.[0]?.isDir
-                startTranslate(
-                  currentFloderTree[0]?.handle as FileSystemDirectoryHandle
-                )
-              }}
-            >
-              汉化当前mod
-            </Button>
           </Space>
           <Tree<DirNode>
             showLine
@@ -126,55 +257,30 @@ function App() {
             onSelect={dirTreeSelect}
           />
         </div>
-        <div className="flex h-screen flex-1 flex-col ">
-          <div className="flex-1 overflow-y-auto p-5">
-            <Tree<TagTree>
-              showLine
-              expandedKeys={expandKeys}
-              onExpand={(keys) => {
-                setExpandKeys(keys)
-              }}
-              titleRender={(nodeData) => {
-                if (nodeData.$) {
-                  return <ThingNode {...nodeData.$} label={nodeData.$label} />
-                }
-                return (
-                  <NormalNode
-                    tagName={nodeData.$tagName}
-                    label={nodeData.$label}
-                  />
-                )
-              }}
-              fieldNames={{
-                title: "$tagName",
-                key: "key",
-                children: "$childrens"
-              }}
-              switcherIcon={<DownOutlined />}
-              onSelect={(selectedKeys, { selectedNodes }) => {
-                setTransition(() => {
-                  setCurrentSelectNode(selectedNodes[0])
-                })
-              }}
-              treeData={currentFileXMLTree}
-            />
-          </div>
-          <div className="border-gray border-t-2">
-            <ProTable
-              title={() =>
-                currentSelectNode?.$tagName && (
-                  <div className="text-[16px] font-bold">
-                    {currentSelectNode?.$tagName}
-                  </div>
+        <div className="flex h-screen flex-1 flex-col overflow-y-auto ">
+          <ProTable
+            params={{ allDefs }}
+            request={async (params: any) => {
+              const { title, defType, contextSearch } = params
+              let result = allDefs
+              if (title) {
+                result = result?.filter(
+                  (def) => def.defName === title || def.className === title
                 )
               }
-              pagination={{ defaultPageSize: 100 }}
-              dataSource={valueSource}
-              columns={valueTableColumns}
-              search={false}
-              scroll={{ x: "100%", y: 290 }}
-            />
-          </div>
+              if (defType) {
+                result = result?.filter((def) => def.defType === defType)
+              }
+              if (contextSearch) {
+                result = result?.filter((def) =>
+                  JSON.stringify(def.parsed).includes(contextSearch)
+                )
+              }
+              return { success: true, data: result }
+            }}
+            columns={colums}
+            expandable={{ expandedRowRender }}
+          />
         </div>
       </div>
     </StyleProvider>
