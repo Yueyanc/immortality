@@ -43,84 +43,13 @@ import { BasicDataNode } from "antd/es/tree"
 import useMods from "@/hooks/useMods"
 import { DirNode, FileNode } from "../../../shared/utils/file"
 import { ExpandableConfig } from "antd/es/table/interface"
-
-const Descriptions: React.FC<{ record: Def }> = ({ record }) => {
-  // TODO: 多视角图片支持
-  const [textureUrl, setTextureUrl] = useState("")
-  useEffect(() => {
-    async function getPng() {
-      const texturePaths =
-        record.parsed?.graphicData?.[0]?.texPath?.[0]?.split("/")
-      let target: any
-      if (texturePaths) {
-        target = record.getMod()?.textureDir?.handle
-        for (let index = 0; index < texturePaths.length; index++) {
-          const name = texturePaths[index]
-          if (index !== texturePaths.length - 1) {
-            target = await target?.getDirectoryHandle(name)
-          } else {
-            target = await target?.getFileHandle(name + ".png")
-          }
-        }
-      }
-      return target
-    }
-    getPng().then(async (res: FileSystemFileHandle) => {
-      const imageUrl = URL.createObjectURL(await res.getFile())
-      setTextureUrl(imageUrl)
-    })
-  }, [])
-  return (
-    <ProDescriptions editable={{}} dataSource={record}>
-      {textureUrl && (
-        <ProDescriptions.Item
-          editable={false}
-          span={3}
-          contentStyle={{
-            maxWidth: "100%"
-          }}
-          label="贴图"
-        >
-          <Image src={textureUrl} height={200} />
-        </ProDescriptions.Item>
-      )}
-
-      <ProDescriptions.Item
-        editable={false}
-        span={2}
-        contentStyle={{
-          maxWidth: "100%"
-        }}
-        valueType="text"
-        label="描述"
-      >
-        {record.description}
-      </ProDescriptions.Item>
-      <br />
-      <ProDescriptions.Item
-        editable={false}
-        valueType="text"
-        label="游戏内名称"
-        span={3}
-        ellipsis
-      >
-        {record.label}
-      </ProDescriptions.Item>
-      <ProDescriptions.Item label="定义代码" valueType="jsonCode">
-        {JSON.stringify(record.parsed)}
-      </ProDescriptions.Item>
-    </ProDescriptions>
-  )
-}
+import Descriptions from "@/components/Descriptions"
 
 function App() {
-  const directoryHandle = useRef<FileSystemDirectoryHandle>()
   const [isPengding, setTransition] = useTransition()
-  const [workspaceTree, setWorkspaceTree] = useState<FolderTreeNode[]>([])
   const [currentFloderTree, setCurrentFloderTree] = useState<DirNode[]>([])
   const [currentFiles, setCurrentFiles] = useState<XML[]>()
   const [defTypeEnum, setDefTypeEnum] = useState(new Map())
-  const { modList } = useMods(workspaceTree)
 
   const dirTreeSelect: TreeProps<
     (DirNode | FileNode) & BasicDataNode
@@ -139,16 +68,13 @@ function App() {
           }
         },
         width: 100,
-        filters: true,
-        onFilter: true,
         valueType: "select",
         valueEnum: {
           true: { text: "抽象类" },
           false: {
             text: "具体定义"
           }
-        },
-        hideInSearch: true
+        }
       },
       {
         title: "标题",
@@ -194,6 +120,7 @@ function App() {
   }, [defTypeEnum])
 
   const allDefs = useMemo(() => {
+    // 扫描全部的定义类型
     const defs = currentFiles?.map((item) => item.defs)?.flat()
     const defTypeEnum = new Map()
     defs?.forEach((value) => {
@@ -219,7 +146,6 @@ function App() {
                   await window.showDirectoryPicker({
                     mode: "readwrite"
                   })
-                directoryHandle.current = fileSystemDirectoryHandle
                 const tree = new DirNode({
                   handle: fileSystemDirectoryHandle
                 })
@@ -233,7 +159,6 @@ function App() {
                   }
                 })
                 console.log(tree)
-
                 setTransition(() => {
                   setCurrentFiles(files)
                 })
@@ -241,13 +166,13 @@ function App() {
             >
               选取mod文件夹
             </Button>
-            <Select
+            {/* <Select
               className="w-[200px]"
               options={modList.map((item) => ({
                 label: item.info.name,
                 value: item.key
               }))}
-            />
+            /> */}
           </Space>
           <Tree<DirNode>
             showLine
@@ -261,11 +186,16 @@ function App() {
           <ProTable
             params={{ allDefs }}
             request={async (params: any) => {
-              const { title, defType, contextSearch } = params
+              const { title, defType, contextSearch, isAbstract } = params
               let result = allDefs
               if (title) {
                 result = result?.filter(
                   (def) => def.defName === title || def.className === title
+                )
+              }
+              if (isAbstract) {
+                result = result?.filter(
+                  (def) => def.isAbstract.toString() === isAbstract
                 )
               }
               if (defType) {
